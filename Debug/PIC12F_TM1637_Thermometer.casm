@@ -1,0 +1,1374 @@
+;/////////////////////////////////////////////////////////////////////////////////
+;// Code Generator: BoostC Compiler - http://www.sourceboost.com
+;// Version       : 8.01
+;// License Type  : Pro License
+;// Limitations   : PIC12,PIC16 max code size:Unlimited, max RAM banks:Unlimited
+;/////////////////////////////////////////////////////////////////////////////////
+
+#ifndef _PIC12F_TM1637_Thermometer_H_
+#define _PIC12F_TM1637_Thermometer_H_
+
+#define TASK_TIMER1 2
+#define TASK_TIMER1_START 3
+#define TASK_TIMER1_READ 4
+#define oneWireBus (gpio.2)
+#define oneWireTris (trisio.2)
+#define tm1637dio (gpio.4)
+#define tm1637clk (gpio.5)
+#define tm1637dioTris (trisio.4)
+#define tm1637clkTris (trisio.5)
+// refresh interval - time in ms divided by 262. Max value is 252.
+#define TIMER_1_INTERVAL 114
+
+// Hold the upper and lower bytes from the ds18b20
+char cTempH = 0;
+0210  1283  	BCF STATUS, RP0
+0211  01B1  	CLRF gbl_cTempH
+
+char cTempL = 0;
+0212  01B2  	CLRF gbl_cTempL
+
+char iDecimalPosition = 2;
+0213  3002  	MOVLW 0x02
+0214  00B3  	MOVWF gbl_iDecimalPosition
+
+
+char oneWireIsPresent = 0;
+0215  01B4  	CLRF gbl_oneWireIsPresent
+
+char oneWireResetStage = 0;
+0216  01B5  	CLRF gbl_oneWireResetStage
+
+void oneWireBusReset();
+void oneWireTxByte(char data);
+void oneWireTxBytes(char data, char data2);
+char oneWireRxByte();
+
+// Used for counting timer 1 overflows. 
+// Initialise it close to interval so temp refresh on power on is near instant
+char iTimer1Count = TIMER_1_INTERVAL - 4; 
+0217  306E  	MOVLW 0x6E
+0218  00B6  	MOVWF gbl_iTimer1Count
+
+char cTask = 0; // Used for task scheduler
+0219  01B7  	CLRF gbl_cTask
+
+
+// Used to output the segments from numbers
+char tm1637MaxDigits = 4;
+021A  3004  	MOVLW 0x04
+021B  00B8  	MOVWF gbl_tm1637MaxDigits
+
+char tm1637DisplayNumtoSeg[] = {0x3f, 0x06, 0x5b, 0x4f, 0x66, 0x6d, 0x7d, 0x07, 0x7f, 0x6f};
+021C  303F  	MOVLW 0x3F
+021D  00A0  	MOVWF gbl_tm1637DisplayNumtoSeg
+021E  3006  	MOVLW 0x06
+021F  00A1  	MOVWF gbl_tm1637DisplayNumtoSeg+D'1'
+0220  305B  	MOVLW 0x5B
+0221  00A2  	MOVWF gbl_tm1637DisplayNumtoSeg+D'2'
+0222  304F  	MOVLW 0x4F
+0223  00A3  	MOVWF gbl_tm1637DisplayNumtoSeg+D'3'
+0224  3066  	MOVLW 0x66
+0225  00A4  	MOVWF gbl_tm1637DisplayNumtoSeg+D'4'
+0226  306D  	MOVLW 0x6D
+0227  00A5  	MOVWF gbl_tm1637DisplayNumtoSeg+D'5'
+0228  307D  	MOVLW 0x7D
+0229  00A6  	MOVWF gbl_tm1637DisplayNumtoSeg+D'6'
+022A  3007  	MOVLW 0x07
+022B  00A7  	MOVWF gbl_tm1637DisplayNumtoSeg+D'7'
+022C  307F  	MOVLW 0x7F
+022D  00A8  	MOVWF gbl_tm1637DisplayNumtoSeg+D'8'
+022E  306F  	MOVLW 0x6F
+022F  00A9  	MOVWF gbl_tm1637DisplayNumtoSeg+D'9'
+
+char tm1637Dot = 0x80;
+0230  3080  	MOVLW 0x80
+0231  00B9  	MOVWF gbl_tm1637Dot
+
+char tm1637Brightness = 7; // 0 to 7
+0232  3007  	MOVLW 0x07
+0233  00BA  	MOVWF gbl_tm1637Brightness
+
+// 0x40 [01000000] = indicate command to display data
+char tm1637ByteSetData = 0x40;
+0234  3040  	MOVLW 0x40
+0235  00BB  	MOVWF gbl_tm1637ByteSetData
+
+// 0xC0 [11000000] = write out all bytes
+char tm1637ByteSetAddr = 0xC0;
+0236  30C0  	MOVLW 0xC0
+0237  00BC  	MOVWF gbl_tm1637ByteSetAddr
+
+// 0x88 [10001000] - Display ON, plus brightness
+char tm1637ByteSetOn = 0x88;
+0238  3088  	MOVLW 0x88
+0239  00BD  	MOVWF gbl_tm1637ByteSetOn
+
+
+// Copy of the data to write / on the display
+char tm1637Data[] = {0, 0, 0, 0};
+023A  01AA  	CLRF gbl_tm1637Data
+023B  01AB  	CLRF gbl_tm1637Data+D'1'
+023C  01AC  	CLRF gbl_tm1637Data+D'2'
+023D  01AD  	CLRF gbl_tm1637Data+D'3'
+
+
+void tm1637Init();
+void tm1637UpdateDisplay();
+void tm1637StartCondition();
+char tm1637ByteWrite(char bWrite);
+void tm1637StopCondition();
+
+void displayTemp();
+void storeTempDigits4(int iValue);
+void startTemp();
+void readTemp();
+
+#endif //_PIC12FTIMER1_H_
+
+#include <system.h>
+#include "PIC12F_TM1637_Thermometer.h"
+
+//Target PIC12F675 configuration word
+#pragma DATA _CONFIG, _PWRTE_ON & _WDT_OFF & _INTRC_OSC_NOCLKOUT & _CPD_OFF & _CP_OFF & _MCLRE_OFF & _BODEN_ON
+
+//Set clock frequency
+#pragma CLOCK_FREQ	4000000
+
+/*********************************************************************************************
+  oneWireBusReset()
+  First part of the reset routine - drive the bus low for 500us
+*********************************************************************************************/
+void oneWireBusReset() {
+
+    char isPresent;
+    oneWireTris = 1; // start with high
+012D  1683  	BSF STATUS, RP0
+012E  1505  	BSF gbl_trisio,2
+
+    isPresent = 0;
+012F  1283  	BCF STATUS, RP0
+0130  01BE  	CLRF oneWireBus_00015_1_isPresent
+
+    // Send the reset pulse - drive low for 500us
+    oneWireBus = 0;      
+0131  1105  	BCF gbl_gpio,2
+
+    oneWireTris = 0;
+0132  1683  	BSF STATUS, RP0
+0133  1105  	BCF gbl_trisio,2
+
+    delay_10us(50);
+0134  3032  	MOVLW 0x32
+0135  1283  	BCF STATUS, RP0
+0136  00C3  	MOVWF delay_10us_00000_arg_del
+0137  2010  	CALL delay_10us_00000
+
+    // Release line and wait 70us for PD Pulse
+    oneWireTris = 1;
+0138  1683  	BSF STATUS, RP0
+0139  1505  	BSF gbl_trisio,2
+
+    delay_10us(7);
+013A  3007  	MOVLW 0x07
+013B  1283  	BCF STATUS, RP0
+013C  00C3  	MOVWF delay_10us_00000_arg_del
+013D  2010  	CALL delay_10us_00000
+
+    // Now sample, if there is a sensor on the bus, the line should be low
+    if (oneWireBus) {
+013E  1905  	BTFSC gbl_gpio,2
+
+        oneWireIsPresent = 0; // no devices
+013F  01B4  	CLRF gbl_oneWireIsPresent
+
+    }
+    delay_10us(50);
+0140  3032  	MOVLW 0x32
+0141  00C3  	MOVWF delay_10us_00000_arg_del
+0142  2010  	CALL delay_10us_00000
+
+}
+0143  0008  	RETURN
+
+
+/*********************************************************************************************
+  oneWireTxByte(char data)
+  Transmits a single byte from the bus
+*********************************************************************************************/
+void oneWireTxByte(char cData) {
+
+    char cTemp = 1;
+0024  3001  	MOVLW 0x01
+0025  00C1  	MOVWF oneWireTxB_00016_1_cTemp
+
+    // Loop through the eight bits in the byte
+    for (char i = 0; i < 8; i++) {
+0026  01C2  	CLRF oneWireTxB_00016_2_i
+0027        label3
+0027  3008  	MOVLW 0x08
+0028  0242  	SUBWF oneWireTxB_00016_2_i, W
+0029  1803  	BTFSC STATUS,C
+003E  0AC2  	INCF oneWireTxB_00016_2_i, F
+003F  2827  	GOTO	label3
+
+        // Send the LSB first
+
+        // Drive the line low initially for 3us
+        oneWireTris = 0;
+002B  1683  	BSF STATUS, RP0
+002C  1105  	BCF gbl_trisio,2
+
+        oneWireBus = 0;
+002D  1283  	BCF STATUS, RP0
+002E  1105  	BCF gbl_gpio,2
+
+
+        // Delay not needed for 4MHz PIC
+        //delay_us(3); // Delay 3us
+        
+        if (cData & cTemp) {
+002F  0841  	MOVF oneWireTxB_00016_1_cTemp, W
+0030  0540  	ANDWF oneWireTxB_00016_arg_cData, W
+0031  1903  	BTFSC STATUS,Z
+0032  2835  	GOTO	label4
+
+            oneWireTris = 1; // Release the bus
+0033  1683  	BSF STATUS, RP0
+0034  1505  	BSF gbl_trisio,2
+
+        }
+        
+        delay_10us(5); // Delay 60us - 50us works fine with code delays
+0035  3005  	MOVLW 0x05
+0036  1283  	BCF STATUS, RP0
+0037  00C3  	MOVWF delay_10us_00000_arg_del
+0038  2010  	CALL delay_10us_00000
+
+        oneWireTris = 1; // Release the bus
+0039  1683  	BSF STATUS, RP0
+003A  1505  	BSF gbl_trisio,2
+
+        
+        // move the test bit
+        cTemp <<= 1;
+003B  1003  	BCF STATUS,C
+003C  1283  	BCF STATUS, RP0
+003D  0DC1  	RLF oneWireTxB_00016_1_cTemp, F
+
+    }
+}
+002A  0008  	RETURN
+
+
+/*********************************************************************************************
+  oneWireTxBytes(char data, char data2)
+  Transmits a 2 bytes from the bus
+*********************************************************************************************/
+void oneWireTxBytes(char cData, char cData2) {
+
+    // Reset first - done in main
+    //oneWireBusReset();
+    // Send first byte
+    oneWireTxByte(cData);
+00AD  083E  	MOVF oneWireTxB_00017_arg_cData, W
+00AE  00C0  	MOVWF oneWireTxB_00016_arg_cData
+00AF  2024  	CALL oneWireTxB_00016
+
+    // Send second byte
+    oneWireTxByte(cData2);
+00B0  083F  	MOVF oneWireTxB_00017_arg_cData2, W
+00B1  00C0  	MOVWF oneWireTxB_00016_arg_cData
+00B2  2024  	CALL oneWireTxB_00016
+
+}
+00B3  0008  	RETURN
+
+
+/*********************************************************************************************
+  oneWireRxByte()
+  Receives a single byte from the bus
+*********************************************************************************************/
+char oneWireRxByte() {
+
+    char cDataIn = 0;
+00B4  1283  	BCF STATUS, RP0
+00B5  01BE  	CLRF oneWireRxB_00018_1_cDataIn
+
+    // Loop through the eight bits in the byte
+    for(char i = 0; i < 8; i++) {
+00B6  01BF  	CLRF oneWireRxB_00018_2_i
+00B7        label10
+00B7  3008  	MOVLW 0x08
+00B8  023F  	SUBWF oneWireRxB_00018_2_i, W
+00B9  1803  	BTFSC STATUS,C
+00BA  28CE  	GOTO	label11
+00CC  0ABF  	INCF oneWireRxB_00018_2_i, F
+00CD  28B7  	GOTO	label10
+00CE        label11
+
+        // Bring bus low for 15us
+        oneWireTris = 0;
+00BB  1683  	BSF STATUS, RP0
+00BC  1105  	BCF gbl_trisio,2
+
+        oneWireBus = 0;
+00BD  1283  	BCF STATUS, RP0
+00BE  1105  	BCF gbl_gpio,2
+
+
+        // Delay not needed for 4MHz PIC
+        //delay_us(15); // Delay 15us
+
+        // Release bus for 6us, this is enough time for the slave to respond
+        oneWireTris = 1;
+00BF  1683  	BSF STATUS, RP0
+00C0  1505  	BSF gbl_trisio,2
+
+        delay_us(6); // Delay 6us
+00C1  3006  	MOVLW 0x06
+00C2  1283  	BCF STATUS, RP0
+00C3  00C3  	MOVWF delay_us_00000_arg_del
+00C4  201A  	CALL delay_us_00000
+
+        
+        // Shift data already received left
+        cDataIn >>= 1;
+00C5  1003  	BCF STATUS,C
+00C6  0CBE  	RRF oneWireRxB_00018_1_cDataIn, F
+
+        // Check the value of the onewire bus - set the MSB of cDataIn if so
+        if (oneWireBus)
+00C7  1905  	BTFSC gbl_gpio,2
+
+            cDataIn.7 = 1;
+00C8  17BE  	BSF oneWireRxB_00018_1_cDataIn,7
+
+
+        // To finish time slot
+        delay_10us(6); // 60us
+00C9  3006  	MOVLW 0x06
+00CA  00C3  	MOVWF delay_10us_00000_arg_del
+00CB  2010  	CALL delay_10us_00000
+
+    } 
+    
+    return cDataIn;
+00CE  083E  	MOVF oneWireRxB_00018_1_cDataIn, W
+00CF  00BF  	MOVWF CompTempVarRet548
+
+}
+00D0  0008  	RETURN
+
+
+/*********************************************************************************************
+ tm1637UpdateDisplay()
+ Publish the tm1637Data array to the display
+*********************************************************************************************/
+void tm1637UpdateDisplay() {
+
+    // Write 0x40 [01000000] to indicate command to display data - [Write data to display register]
+    tm1637StartCondition();
+00FA  2054  	CALL tm1637Star_0001A
+
+    tm1637ByteWrite(tm1637ByteSetData);
+00FB  083B  	MOVF gbl_tm1637ByteSetData, W
+00FC  00BF  	MOVWF tm1637Byte_0001B_arg_bWrite
+00FD  205C  	CALL tm1637Byte_0001B
+
+    tm1637StopCondition();
+00FE  2040  	CALL tm1637Stop_0001C
+
+
+    // Specify the display address 0xC0 [11000000] then write out all 4 bytes
+    tm1637StartCondition();
+00FF  2054  	CALL tm1637Star_0001A
+
+    tm1637ByteWrite(tm1637ByteSetAddr);
+0100  083C  	MOVF gbl_tm1637ByteSetAddr, W
+0101  00BF  	MOVWF tm1637Byte_0001B_arg_bWrite
+0102  205C  	CALL tm1637Byte_0001B
+
+    for (char i = 0; i < tm1637MaxDigits; i++)
+0103  01BE  	CLRF tm1637Upda_00019_2_i
+0104        label15
+0104  0838  	MOVF gbl_tm1637MaxDigits, W
+0105  023E  	SUBWF tm1637Upda_00019_2_i, W
+0106  1803  	BTFSC STATUS,C
+0107  2911  	GOTO	label16
+010F  0ABE  	INCF tm1637Upda_00019_2_i, F
+0110  2904  	GOTO	label15
+0111        label16
+
+        tm1637ByteWrite(tm1637Data[i]);
+0108  302A  	MOVLW LOW(gbl_tm1637Data+D'0')
+0109  0084  	MOVWF FSR
+010A  083E  	MOVF tm1637Upda_00019_2_i, W
+010B  0784  	ADDWF FSR, F
+010C  0800  	MOVF INDF, W
+010D  00BF  	MOVWF tm1637Byte_0001B_arg_bWrite
+010E  205C  	CALL tm1637Byte_0001B
+
+    tm1637StopCondition();
+0111  2040  	CALL tm1637Stop_0001C
+
+
+    // Write 0x80 [10001000] - Display ON, plus brightness
+    tm1637StartCondition();
+0112  2054  	CALL tm1637Star_0001A
+
+    tm1637ByteWrite((tm1637ByteSetOn + tm1637Brightness));
+0113  083A  	MOVF gbl_tm1637Brightness, W
+0114  073D  	ADDWF gbl_tm1637ByteSetOn, W
+0115  00BF  	MOVWF tm1637Byte_0001B_arg_bWrite
+0116  205C  	CALL tm1637Byte_0001B
+
+    tm1637StopCondition();
+0117  2040  	CALL tm1637Stop_0001C
+
+}
+0118  0008  	RETURN
+
+
+/*********************************************************************************************
+ tm1637StartCondition()
+ Send the start condition
+*********************************************************************************************/
+void tm1637StartCondition() {
+
+    tm1637dioTris = 0;
+0054  1683  	BSF STATUS, RP0
+0055  1205  	BCF gbl_trisio,4
+
+    tm1637dio = 0;
+0056  1283  	BCF STATUS, RP0
+0057  1205  	BCF gbl_gpio,4
+
+    delay_us(100);
+0058  3064  	MOVLW 0x64
+0059  00C3  	MOVWF delay_us_00000_arg_del
+005A  201A  	CALL delay_us_00000
+
+}
+005B  0008  	RETURN
+
+
+/*********************************************************************************************
+ tm1637ByteWrite(char bWrite)
+ Write one byte
+*********************************************************************************************/
+char tm1637ByteWrite(char bWrite) {
+
+    for (char i = 0; i < 8; i++) {
+005C  01C1  	CLRF tm1637Byte_0001B_2_i
+005D        label5
+005D  3008  	MOVLW 0x08
+005E  0241  	SUBWF tm1637Byte_0001B_2_i, W
+005F  1803  	BTFSC STATUS,C
+0060  2885  	GOTO	label8
+0083  0AC1  	INCF tm1637Byte_0001B_2_i, F
+0084  285D  	GOTO	label5
+0085        label8
+
+        // Clock low
+        tm1637clkTris = 0;
+0061  1683  	BSF STATUS, RP0
+0062  1285  	BCF gbl_trisio,5
+
+        tm1637clk = 0;
+0063  1283  	BCF STATUS, RP0
+0064  1285  	BCF gbl_gpio,5
+
+        delay_us(100);
+0065  3064  	MOVLW 0x64
+0066  00C3  	MOVWF delay_us_00000_arg_del
+0067  201A  	CALL delay_us_00000
+
+        
+        // Test bit of byte, data high or low
+        if ((bWrite & 0x01) > 0) {
+0068  3001  	MOVLW 0x01
+0069  053F  	ANDWF tm1637Byte_0001B_arg_bWrite, W
+006A  00C2  	MOVWF CompTempVar554
+006B  0842  	MOVF CompTempVar554, W
+006C  3C00  	SUBLW 0x00
+006D  1803  	BTFSC STATUS,C
+006E  2872  	GOTO	label6
+0072        label6
+
+            tm1637dioTris = 1;
+006F  1683  	BSF STATUS, RP0
+0070  1605  	BSF gbl_trisio,4
+
+        } else {
+0071  2876  	GOTO	label7
+0076        label7
+
+            tm1637dioTris = 0;
+0072  1683  	BSF STATUS, RP0
+0073  1205  	BCF gbl_trisio,4
+
+            tm1637dio = 0;
+0074  1283  	BCF STATUS, RP0
+0075  1205  	BCF gbl_gpio,4
+
+        }
+        delay_us(100);
+0076  3064  	MOVLW 0x64
+0077  1283  	BCF STATUS, RP0
+0078  00C3  	MOVWF delay_us_00000_arg_del
+0079  201A  	CALL delay_us_00000
+
+
+        // Shift bits to the left
+        bWrite = (bWrite >> 1);
+007A  08BF  	MOVF tm1637Byte_0001B_arg_bWrite, F
+007B  1003  	BCF STATUS,C
+007C  0CBF  	RRF tm1637Byte_0001B_arg_bWrite, F
+
+        // Clock high
+        tm1637clkTris = 1;
+007D  1683  	BSF STATUS, RP0
+007E  1685  	BSF gbl_trisio,5
+
+        delay_us(100);
+007F  3064  	MOVLW 0x64
+0080  1283  	BCF STATUS, RP0
+0081  00C3  	MOVWF delay_us_00000_arg_del
+0082  201A  	CALL delay_us_00000
+
+    }
+
+    // Wait for ack, send clock low
+    tm1637clkTris = 0;
+0085  1683  	BSF STATUS, RP0
+0086  1285  	BCF gbl_trisio,5
+
+    tm1637clk = 0;
+0087  1283  	BCF STATUS, RP0
+0088  1285  	BCF gbl_gpio,5
+
+    // Make data an input
+    tm1637dioTris = 1;
+0089  1683  	BSF STATUS, RP0
+008A  1605  	BSF gbl_trisio,4
+
+    tm1637dio = 0;
+008B  1283  	BCF STATUS, RP0
+008C  1205  	BCF gbl_gpio,4
+
+    delay_us(100);
+008D  3064  	MOVLW 0x64
+008E  00C3  	MOVWF delay_us_00000_arg_del
+008F  201A  	CALL delay_us_00000
+
+    
+    // Clock high
+    tm1637clkTris = 1;
+0090  1683  	BSF STATUS, RP0
+0091  1685  	BSF gbl_trisio,5
+
+    delay_us(100);
+0092  3064  	MOVLW 0x64
+0093  1283  	BCF STATUS, RP0
+0094  00C3  	MOVWF delay_us_00000_arg_del
+0095  201A  	CALL delay_us_00000
+
+    char tm1637ack = tm1637dio;
+0096  01C0  	CLRF tm1637Byte_0001B_1_tm1637ack
+0097  1A05  	BTFSC gbl_gpio,4
+0098  0AC0  	INCF tm1637Byte_0001B_1_tm1637ack, F
+
+    if (!tm1637ack) {
+0099  08C0  	MOVF tm1637Byte_0001B_1_tm1637ack, F
+009A  1D03  	BTFSS STATUS,Z
+009B  28A0  	GOTO	label9
+00A0        label9
+
+        tm1637dioTris = 0;
+009C  1683  	BSF STATUS, RP0
+009D  1205  	BCF gbl_trisio,4
+
+        tm1637dio = 0;
+009E  1283  	BCF STATUS, RP0
+009F  1205  	BCF gbl_gpio,4
+
+    }
+        
+    // Clock low
+    delay_us(100);
+00A0  3064  	MOVLW 0x64
+00A1  00C3  	MOVWF delay_us_00000_arg_del
+00A2  201A  	CALL delay_us_00000
+
+    tm1637clkTris = 0;
+00A3  1683  	BSF STATUS, RP0
+00A4  1285  	BCF gbl_trisio,5
+
+    tm1637clk = 0;
+00A5  1283  	BCF STATUS, RP0
+00A6  1285  	BCF gbl_gpio,5
+
+    delay_us(100);
+00A7  3064  	MOVLW 0x64
+00A8  00C3  	MOVWF delay_us_00000_arg_del
+00A9  201A  	CALL delay_us_00000
+
+
+    return 1;
+00AA  3001  	MOVLW 0x01
+00AB  00C1  	MOVWF CompTempVarRet553
+
+}
+00AC  0008  	RETURN
+
+
+/*********************************************************************************************
+ tm1637StopCondition()
+ Send the stop condition
+*********************************************************************************************/
+void tm1637StopCondition() {
+
+    // Data low
+    tm1637dioTris = 0;
+0040  1683  	BSF STATUS, RP0
+0041  1205  	BCF gbl_trisio,4
+
+    tm1637dio = 0;
+0042  1283  	BCF STATUS, RP0
+0043  1205  	BCF gbl_gpio,4
+
+    delay_us(100);
+0044  3064  	MOVLW 0x64
+0045  00C3  	MOVWF delay_us_00000_arg_del
+0046  201A  	CALL delay_us_00000
+
+    // Release clk
+    tm1637clkTris = 1;
+0047  1683  	BSF STATUS, RP0
+0048  1685  	BSF gbl_trisio,5
+
+    //tm1637clk = 1;
+    delay_us(100);
+0049  3064  	MOVLW 0x64
+004A  1283  	BCF STATUS, RP0
+004B  00C3  	MOVWF delay_us_00000_arg_del
+004C  201A  	CALL delay_us_00000
+
+    // Release data
+    tm1637dioTris = 1;
+004D  1683  	BSF STATUS, RP0
+004E  1605  	BSF gbl_trisio,4
+
+    delay_us(100);
+004F  3064  	MOVLW 0x64
+0050  1283  	BCF STATUS, RP0
+0051  00C3  	MOVWF delay_us_00000_arg_del
+0052  201A  	CALL delay_us_00000
+
+}
+0053  0008  	RETURN
+
+
+
+/*********************************************************************************************
+  Function called once only to initialise variables and
+  setup the PIC registers
+*********************************************************************************************/
+void initialise() {
+
+    // GP0 = OUT: N/C
+    // GP1 = OUT: N/C
+    // GP2 = IN/OUT: DS18B20
+    // GP3 = OUT: N/C
+    // GP4 = IN/OUT: TM1637 DIO
+    // GP5 = IN/OUT: TM1637 CLK
+    gpio = 0b00000000; // all pins off by default
+0144  1283  	BCF STATUS, RP0
+0145  0185  	CLRF gbl_gpio
+
+    trisio = 0b00110100; // TM1637 pins and DS18B20 pin are inputs
+0146  3034  	MOVLW 0x34
+0147  1683  	BSF STATUS, RP0
+0148  0085  	MOVWF gbl_trisio
+
+    
+    ansel = 0; // configure A/D inputs as digital I/O
+0149  019F  	CLRF gbl_ansel
+
+    cmcon = 7; // compartor off
+014A  3007  	MOVLW 0x07
+014B  1283  	BCF STATUS, RP0
+014C  0099  	MOVWF gbl_cmcon
+
+
+    option_reg = 0;
+014D  1683  	BSF STATUS, RP0
+014E  0181  	CLRF gbl_option_reg
+
+    option_reg.NOT_GPPU = 1; // disable pull ups
+014F  1781  	BSF gbl_option_reg,7
+
+    
+    // Setup timer 1, used to periodically ask for a temperature reading, and receive it after sending - 262ms
+    // Timer calculator: http://eng-serve.com/pic/pic_timer.html
+    // Timer 1 setup - interrupt every 262ms seconds 4MHz
+    t1con = 0;
+0150  1283  	BCF STATUS, RP0
+0151  0190  	CLRF gbl_t1con
+
+    t1con.T1CKPS1 = 1;   // bits 5-4  Prescaler Rate Select bits
+0152  1690  	BSF gbl_t1con,5
+
+    //t1con.T1CKPS0 = 0;   // bit 4
+    //t1con.T1OSCEN = 0;   // bit 3 Timer1 Oscillator Enable Control bit 1 = off - this should be cleared so we can use RB7 and RB6 as outputs
+    t1con.NOT_T1SYNC = 1;    // bit 2 Timer1 External Clock Input Synchronization Control bit...1 = Do not synchronize external clock input
+0153  1510  	BSF gbl_t1con,2
+
+    //t1con.TMR1CS = 0;    // bit 1 Timer1 Clock Source Select bit...0 = Internal clock (FOSC/4)
+    t1con.TMR1ON = 1;    // bit 0 enables timer
+0154  1410  	BSF gbl_t1con,0
+
+    pie1.TMR1IE = 1; // Timer 1 interrupt enable
+0155  1683  	BSF STATUS, RP0
+0156  140C  	BSF gbl_pie1,0
+
+    pir1.TMR1IF = 0; // Clear timer 1 interrupt flag bit
+0157  1283  	BCF STATUS, RP0
+0158  100C  	BCF gbl_pir1,0
+
+    
+    // No task at initialisation
+    cTask = 0;
+0159  01B7  	CLRF gbl_cTask
+
+    
+    // Enable interrupts
+    intcon.GIE = 1;
+015A  178B  	BSF gbl_intcon,7
+
+    intcon.PEIE = 1;
+015B  170B  	BSF gbl_intcon,6
+
+}
+015C  0008  	RETURN
+
+
+
+/*********************************************************************************************
+  interrupt()
+  Interrupt handler
+*********************************************************************************************/
+void interrupt() {
+
+    // Handle timer1 interrupt - delay counter
+    if (pir1.TMR1IF && pie1.TMR1IE) {
+0241  1283  	BCF STATUS, RP0
+0242  1C0C  	BTFSS gbl_pir1,0
+0243  2A54  	GOTO	label31
+0244  1683  	BSF STATUS, RP0
+0245  1C0C  	BTFSS gbl_pie1,0
+0246  2A54  	GOTO	label31
+0254        label31
+
+        // timer 1 will interrupt every 262ms with a 1:4 prescaler at 4MHz
+        // We'll ask for the temperatute every 30 seconds
+        // Into 30 seconds, 262ms goes 114 times (roughly)
+        if (iTimer1Count == TIMER_1_INTERVAL) {
+0247  1283  	BCF STATUS, RP0
+0248  0836  	MOVF gbl_iTimer1Count, W
+0249  3A72  	XORLW 0x72
+024A  1903  	BTFSC STATUS,Z
+
+            // If the number of tasks to perform is less than the limit,
+            // then add this task to the task array
+            cTask.TASK_TIMER1_START = 1;
+024B  15B7  	BSF gbl_cTask,3
+
+        }
+        // just over 750ms after asking for temperature, it should be ready, so get the reading
+        // 0.75 seconds is three more ticks above TIMER_1_INTERVAL
+        if (iTimer1Count >= TIMER_1_INTERVAL + 3) {
+024C  3075  	MOVLW 0x75
+024D  0236  	SUBWF gbl_iTimer1Count, W
+024E  1C03  	BTFSS STATUS,C
+024F  2A52  	GOTO	label30
+0252        label30
+
+            iTimer1Count = 0;
+0250  01B6  	CLRF gbl_iTimer1Count
+
+            // If the number of tasks to perform is less than the limit,
+            // then add this task to the task array
+            cTask.TASK_TIMER1_READ = 1;
+0251  1637  	BSF gbl_cTask,4
+
+        }
+        // Count the number of times this timer overflowed
+        iTimer1Count++;
+0252  0AB6  	INCF gbl_iTimer1Count, F
+
+        // Clear interrupt flag
+        pir1.TMR1IF = 0; 
+0253  100C  	BCF gbl_pir1,0
+
+    }
+}
+0254  1283  	BCF STATUS, RP0
+0255  0E30  	SWAPF Int1BContext+D'2', W
+0256  0084  	MOVWF FSR
+0257  0E2F  	SWAPF Int1BContext+D'1', W
+0258  008A  	MOVWF PCLATH
+0259  0E2E  	SWAPF Int1BContext, W
+025A  0083  	MOVWF STATUS
+025B  0EDF  	SWAPF Int1Context, F
+025C  0E5F  	SWAPF Int1Context, W
+025D  0009  	RETFIE
+
+
+/*********************************************************************************************
+  displayTemp()
+  Used to split the 16 bit integer returned from the ds18b20 into parts for display
+  cTempH - upper 8 bits
+  cTempL - lower 8 bits
+*********************************************************************************************/
+void convertTemp() {
+
+    // convert both bytes to a 16bit int - e.g. 0000 0001 0100 0110 (1 and 70, gives 326)
+    
+    signed int iTemp = (cTempH << 8) | cTempL;
+015D  1283  	BCF STATUS, RP0
+015E  01BE  	CLRF convertTem_0001D_1_iTemp
+015F  0831  	MOVF gbl_cTempH, W
+0160  00BF  	MOVWF convertTem_0001D_1_iTemp+D'1'
+0161  0832  	MOVF gbl_cTempL, W
+0162  04BE  	IORWF convertTem_0001D_1_iTemp, F
+
+    
+    // Celcius
+    char isMinus = (iTemp < 0);
+0163  01C0  	CLRF convertTem_0001D_1_isMinus
+0164  1BBF  	BTFSC convertTem_0001D_1_iTemp+D'1',7
+0165  0AC0  	INCF convertTem_0001D_1_isMinus, F
+
+    if (isMinus) {
+0166  08C0  	MOVF convertTem_0001D_1_isMinus, F
+0167  1903  	BTFSC STATUS,Z
+0168  296E  	GOTO	label17
+
+        iTemp = ~iTemp + 1;
+0169  09BE  	COMF convertTem_0001D_1_iTemp, F
+016A  09BF  	COMF convertTem_0001D_1_iTemp+D'1', F
+016B  0ABE  	INCF convertTem_0001D_1_iTemp, F
+016C  1903  	BTFSC STATUS,Z
+016D  0ABF  	INCF convertTem_0001D_1_iTemp+D'1', F
+016E        label17
+
+    }
+    // this gets celcius * 100 - https://www.phanderson.com/PIC/PICC/sourceboost/ds18b20_1.html
+    int iValue = (6 * iTemp) + (iTemp / 4);
+016E  3006  	MOVLW 0x06
+016F  00C9  	MOVWF __mul_16s__0000F_arg_a
+0170  01CA  	CLRF __mul_16s__0000F_arg_a+D'1'
+0171  083E  	MOVF convertTem_0001D_1_iTemp, W
+0172  00CB  	MOVWF __mul_16s__0000F_arg_b
+0173  083F  	MOVF convertTem_0001D_1_iTemp+D'1', W
+0174  00CC  	MOVWF __mul_16s__0000F_arg_b+D'1'
+0175  20D1  	CALL __mul_16s__0000F
+0176  0850  	MOVF CompTempVarRet386, W
+0177  00C1  	MOVWF convertTem_0001D_1_iValue
+0178  0851  	MOVF CompTempVarRet386+D'1', W
+0179  00C4  	MOVWF CompTempVar564
+017A  083E  	MOVF convertTem_0001D_1_iTemp, W
+017B  00C3  	MOVWF CompTempVar561
+017C  083F  	MOVF convertTem_0001D_1_iTemp+D'1', W
+017D  00C2  	MOVWF convertTem_0001D_1_iValue+D'1'
+017E  0D3F  	RLF convertTem_0001D_1_iTemp+D'1', W
+017F  0CC2  	RRF convertTem_0001D_1_iValue+D'1', F
+0180  0CC3  	RRF CompTempVar561, F
+0181  0D3F  	RLF convertTem_0001D_1_iTemp+D'1', W
+0182  0CC2  	RRF convertTem_0001D_1_iValue+D'1', F
+0183  0CC3  	RRF CompTempVar561, F
+0184  0843  	MOVF CompTempVar561, W
+0185  07C1  	ADDWF convertTem_0001D_1_iValue, F
+0186  0844  	MOVF CompTempVar564, W
+0187  1803  	BTFSC STATUS,C
+0188  0AC2  	INCF convertTem_0001D_1_iValue+D'1', F
+0189  07C2  	ADDWF convertTem_0001D_1_iValue+D'1', F
+
+
+    // patch to read a more realistic room temperature. Thermometer reads about 1C higher than it should - won't work below 1C.
+    iValue -= 100;
+018A  3064  	MOVLW 0x64
+018B  02C1  	SUBWF convertTem_0001D_1_iValue, F
+018C  1C03  	BTFSS STATUS,C
+018D  03C2  	DECF convertTem_0001D_1_iValue+D'1', F
+
+    
+    // Split the temperature reading into digits
+    
+    // simple way, but more program memory needed for PIC12 or PIC16 (more than 100 words more)
+    //char cDig3 = iValue / 1000;
+    //char cDig2 = (iValue / 100) % 10;
+    //char cDig1 = (iValue / 10) % 10;
+    //char cDig0 = iValue % 10;
+    
+    // less program memory needed - may be slower executing
+    // https://electronics.stackexchange.com/questions/158563/how-to-split-a-floating-point-number-into-individual-digits
+    char cDig3 = 0;
+018E  01C5  	CLRF convertTem_0001D_1_cDig3
+
+    char cDig2 = 0;
+018F  01C6  	CLRF convertTem_0001D_1_cDig2
+
+    char cDig1 = 0;
+0190  01C7  	CLRF convertTem_0001D_1_cDig1
+
+    char cDig0 = 0;
+0191  01C8  	CLRF convertTem_0001D_1_cDig0
+
+    
+    // incrementing variables for each digit
+
+    // determine to thousands digit
+    while (iValue >= 1000) {
+0192        label18
+0192  3003  	MOVLW 0x03
+0193  0242  	SUBWF convertTem_0001D_1_iValue+D'1', W
+0194  1D03  	BTFSS STATUS,Z
+0195  2998  	GOTO	label19
+0196  30E8  	MOVLW 0xE8
+0197  0241  	SUBWF convertTem_0001D_1_iValue, W
+0198        label19
+0198  1C03  	BTFSS STATUS,C
+0199  29A4  	GOTO	label20
+019A  1BC2  	BTFSC convertTem_0001D_1_iValue+D'1',7
+019B  29A4  	GOTO	label20
+01A3  2992  	GOTO	label18
+01A4        label20
+
+        iValue = iValue - 1000;
+019C  30E8  	MOVLW 0xE8
+019D  02C1  	SUBWF convertTem_0001D_1_iValue, F
+019E  3003  	MOVLW 0x03
+019F  1C03  	BTFSS STATUS,C
+01A0  3004  	MOVLW 0x04
+01A1  02C2  	SUBWF convertTem_0001D_1_iValue+D'1', F
+
+        // each time we take off 1000, the digit is incremented
+        cDig3++;
+01A2  0AC5  	INCF convertTem_0001D_1_cDig3, F
+
+    }
+
+    // determine to hundreds digit
+    while (iValue >= 100) {
+01A4  0842  	MOVF convertTem_0001D_1_iValue+D'1', W
+01A5  3A80  	XORLW 0x80
+01A6  00C9  	MOVWF CompTempVar573
+01A7  3080  	MOVLW 0x80
+01A8  0249  	SUBWF CompTempVar573, W
+01A9  1D03  	BTFSS STATUS,Z
+01AA  29AD  	GOTO	label21
+01AB  3064  	MOVLW 0x64
+01AC  0241  	SUBWF convertTem_0001D_1_iValue, W
+01AD        label21
+01AD  1C03  	BTFSS STATUS,C
+01AE  29B6  	GOTO	label22
+01B5  29A4  	GOTO	label20
+01B6        label22
+
+        iValue = iValue - 100;
+01AF  3064  	MOVLW 0x64
+01B0  02C1  	SUBWF convertTem_0001D_1_iValue, F
+01B1  08C2  	MOVF convertTem_0001D_1_iValue+D'1', F
+01B2  1C03  	BTFSS STATUS,C
+01B3  03C2  	DECF convertTem_0001D_1_iValue+D'1', F
+
+        // each time we take off 100, the digit is incremented
+        cDig2++;
+01B4  0AC6  	INCF convertTem_0001D_1_cDig2, F
+
+    }
+
+    // determine to tens digit
+    while (iValue >= 10) {
+01B6  0842  	MOVF convertTem_0001D_1_iValue+D'1', W
+01B7  3A80  	XORLW 0x80
+01B8  00C9  	MOVWF CompTempVar576
+01B9  3080  	MOVLW 0x80
+01BA  0249  	SUBWF CompTempVar576, W
+01BB  1D03  	BTFSS STATUS,Z
+01BC  29BF  	GOTO	label23
+01BD  300A  	MOVLW 0x0A
+01BE  0241  	SUBWF convertTem_0001D_1_iValue, W
+01BF        label23
+01BF  1C03  	BTFSS STATUS,C
+01C0  29C8  	GOTO	label24
+01C7  29B6  	GOTO	label22
+01C8        label24
+
+        iValue = iValue - 10;
+01C1  300A  	MOVLW 0x0A
+01C2  02C1  	SUBWF convertTem_0001D_1_iValue, F
+01C3  08C2  	MOVF convertTem_0001D_1_iValue+D'1', F
+01C4  1C03  	BTFSS STATUS,C
+01C5  03C2  	DECF convertTem_0001D_1_iValue+D'1', F
+
+        // each time we take off 10, the left most digit is incremented
+        cDig1++;
+01C6  0AC7  	INCF convertTem_0001D_1_cDig1, F
+
+    }
+
+    // the last digit is what's left on iValue
+    cDig0 = iValue;
+01C8  0841  	MOVF convertTem_0001D_1_iValue, W
+01C9  00C8  	MOVWF convertTem_0001D_1_cDig0
+
+
+    // translate the numbers to digit values
+    tm1637Data[0] = tm1637DisplayNumtoSeg[cDig3];
+01CA  3020  	MOVLW LOW(gbl_tm1637DisplayNumtoSeg+D'0')
+01CB  0084  	MOVWF FSR
+01CC  0845  	MOVF convertTem_0001D_1_cDig3, W
+01CD  0784  	ADDWF FSR, F
+01CE  0800  	MOVF INDF, W
+01CF  00AA  	MOVWF gbl_tm1637Data
+
+    tm1637Data[1] = tm1637DisplayNumtoSeg[cDig2] + tm1637Dot;
+01D0  3020  	MOVLW LOW(gbl_tm1637DisplayNumtoSeg+D'0')
+01D1  0084  	MOVWF FSR
+01D2  0846  	MOVF convertTem_0001D_1_cDig2, W
+01D3  0784  	ADDWF FSR, F
+01D4  0839  	MOVF gbl_tm1637Dot, W
+01D5  0700  	ADDWF INDF, W
+01D6  00AB  	MOVWF gbl_tm1637Data+D'1'
+
+    tm1637Data[2] = tm1637DisplayNumtoSeg[cDig1];
+01D7  3020  	MOVLW LOW(gbl_tm1637DisplayNumtoSeg+D'0')
+01D8  0084  	MOVWF FSR
+01D9  0847  	MOVF convertTem_0001D_1_cDig1, W
+01DA  0784  	ADDWF FSR, F
+01DB  0800  	MOVF INDF, W
+01DC  00AC  	MOVWF gbl_tm1637Data+D'2'
+
+    tm1637Data[3] = tm1637DisplayNumtoSeg[cDig0];
+01DD  3020  	MOVLW LOW(gbl_tm1637DisplayNumtoSeg+D'0')
+01DE  0084  	MOVWF FSR
+01DF  0848  	MOVF convertTem_0001D_1_cDig0, W
+01E0  0784  	ADDWF FSR, F
+01E1  0800  	MOVF INDF, W
+01E2  00AD  	MOVWF gbl_tm1637Data+D'3'
+
+
+    // left fill zeroes with blanks up to the digit before the decimal place
+    if (cDig3 == 0) {
+01E3  08C5  	MOVF convertTem_0001D_1_cDig3, F
+01E4  1903  	BTFSC STATUS,Z
+
+        tm1637Data[0] = 0;
+01E5  01AA  	CLRF gbl_tm1637Data
+
+    }
+
+    if (isMinus) {
+01E6  08C0  	MOVF convertTem_0001D_1_isMinus, F
+01E7  1903  	BTFSC STATUS,Z
+
+        // If minus and value less than or equal -10 (checked as >1000), shift the digits right
+        if (iValue >= 1000) {
+01E9  3003  	MOVLW 0x03
+01EA  0242  	SUBWF convertTem_0001D_1_iValue+D'1', W
+01EB  1D03  	BTFSS STATUS,Z
+01EC  29EF  	GOTO	label25
+01ED  30E8  	MOVLW 0xE8
+01EE  0241  	SUBWF convertTem_0001D_1_iValue, W
+01EF        label25
+01EF  1C03  	BTFSS STATUS,C
+01F0  29F9  	GOTO	label26
+01F1  1BC2  	BTFSC convertTem_0001D_1_iValue+D'1',7
+01F2  29F9  	GOTO	label26
+01F9        label26
+
+            tm1637Data[1] = tm1637Data[0];
+01F3  082A  	MOVF gbl_tm1637Data, W
+01F4  00AB  	MOVWF gbl_tm1637Data+D'1'
+
+            tm1637Data[2] = tm1637Data[1];
+01F5  082B  	MOVF gbl_tm1637Data+D'1', W
+01F6  00AC  	MOVWF gbl_tm1637Data+D'2'
+
+            tm1637Data[3] = tm1637Data[2];
+01F7  082C  	MOVF gbl_tm1637Data+D'2', W
+01F8  00AD  	MOVWF gbl_tm1637Data+D'3'
+
+        }
+        // If minus, overwrite left most digit with minus sign
+        tm1637Data[0] = 0x40;
+01F9  3040  	MOVLW 0x40
+01FA  00AA  	MOVWF gbl_tm1637Data
+
+    }
+}
+01E8  0008  	RETURN
+01FB  0008  	RETURN
+
+
+/*********************************************************************************************
+  startTemp()
+  Sends the Convert T [44h] function command to the ds18b20
+*********************************************************************************************/
+void startTemp() {
+
+    // CC indicates to skip rom - addressing all devices (there is only one)
+    // 44 is the convert function
+    oneWireTxBytes(0xCC, 0x44);
+0119  30CC  	MOVLW 0xCC
+011A  1283  	BCF STATUS, RP0
+011B  00BE  	MOVWF oneWireTxB_00017_arg_cData
+011C  3044  	MOVLW 0x44
+011D  00BF  	MOVWF oneWireTxB_00017_arg_cData2
+011E  20AD  	CALL oneWireTxB_00017
+
+}
+011F  0008  	RETURN
+
+
+/*********************************************************************************************
+  startTemp()
+  Sends the Read Scratchpad [BEh] function command to the ds18b20
+*********************************************************************************************/
+void readTemp() {
+
+    // CC indicates to skip rom - addressing all devices (there is only one)
+    // BE indicates to read scratchpad
+    oneWireTxBytes(0xCC, 0xBE);
+0120  30CC  	MOVLW 0xCC
+0121  1283  	BCF STATUS, RP0
+0122  00BE  	MOVWF oneWireTxB_00017_arg_cData
+0123  30BE  	MOVLW 0xBE
+0124  00BF  	MOVWF oneWireTxB_00017_arg_cData2
+0125  20AD  	CALL oneWireTxB_00017
+
+    // Now get the temperature from the scratchpad
+    // This is in the first two bytes - so get those only and ignore the rest
+    cTempL = oneWireRxByte();
+0126  20B4  	CALL oneWireRxB_00018
+0127  083F  	MOVF CompTempVarRet548, W
+0128  00B2  	MOVWF gbl_cTempL
+
+    cTempH = oneWireRxByte();
+0129  20B4  	CALL oneWireRxB_00018
+012A  083F  	MOVF CompTempVarRet548, W
+012B  00B1  	MOVWF gbl_cTempH
+
+}
+012C  0008  	RETURN
+
+
+void main() {
+
+    initialise();
+01FC  2144  	CALL initialise_00000
+
+    convertTemp();
+01FD  215D  	CALL convertTem_0001D
+
+    tm1637UpdateDisplay();
+01FE  20FA  	CALL tm1637Upda_00019
+
+
+    // Endless loop
+    while(1) {
+01FF        label27
+
+        // Task scheduler
+        // If there are tasks to be performed, find out the
+        // most recent task from the array and execute it
+        while (cTask > 0) {
+01FF  0837  	MOVF gbl_cTask, W
+0200  3C00  	SUBLW 0x00
+0201  1803  	BTFSC STATUS,C
+0202  29FF  	GOTO	label27
+020F  29FF  	GOTO	label27
+
+            if (cTask.TASK_TIMER1_START) {
+0203  1DB7  	BTFSS gbl_cTask,3
+0204  2A08  	GOTO	label28
+0208        label28
+
+                // Timer 1 has finished counting to 30 seconds, ask to convert
+                oneWireBusReset();
+0205  212D  	CALL oneWireBus_00015
+
+                startTemp(); 
+0206  2119  	CALL startTemp_00000
+
+                cTask.TASK_TIMER1_START = 0;
+0207  11B7  	BCF gbl_cTask,3
+
+            }
+            if (cTask.TASK_TIMER1_READ) {
+0208  1E37  	BTFSS gbl_cTask,4
+0209  29FF  	GOTO	label27
+
+                // Timer 1 has finished counting a further 750ms, read the converted temperature
+                oneWireBusReset();
+020A  212D  	CALL oneWireBus_00015
+
+                readTemp(); 
+020B  2120  	CALL readTemp_00000
+
+                // store it in the array, next display refresh will pick it up
+                convertTemp();
+020C  215D  	CALL convertTem_0001D
+
+                // Display on TM1637
+                tm1637UpdateDisplay();
+020D  20FA  	CALL tm1637Upda_00019
+
+                cTask.TASK_TIMER1_READ = 0;
+020E  1237  	BCF gbl_cTask,4
+
+            }
+        }
+    }
+}
+
+
+////////////////////////////////////////
+// Code with no source :-)
+////////////////////////////////////////
+0000  2A10  	GOTO	_startup
+
+0004  00DF  	MOVWF Int1Context
+0005  0E03  	SWAPF STATUS, W
+0006  1283  	BCF STATUS, RP0
+0007  00AE  	MOVWF Int1BContext
+0008  0E0A  	SWAPF PCLATH, W
+0009  00AF  	MOVWF Int1BContext+D'1'
+000A  0E04  	SWAPF FSR, W
+000B  00B0  	MOVWF Int1BContext+D'2'
+000C  118A  	BCF PCLATH,3
+000D  120A  	BCF PCLATH,4
+000E  2A41  	GOTO	interrupt
+0010        delay_10us_00000
+0010        ; { delay_10us ; function begin
+0010        label1
+0010  0000  	NOP
+0011  0000  	NOP
+0012  0000  	NOP
+0013  0000  	NOP
+0014  0000  	NOP
+0015  0000  	NOP
+0016  0000  	NOP
+0017  0BC3  	DECFSZ delay_10us_00000_arg_del, F
+0018  2810  	GOTO	label1
+0019  0008  	RETURN
+001A        ; } delay_10us function end
+
+001A        delay_us_00000
+001A        ; { delay_us ; function begin
+001A  3003  	MOVLW 0x03
+001B  07C3  	ADDWF delay_us_00000_arg_del, F
+001C  0CC3  	RRF delay_us_00000_arg_del, F
+001D  0CC3  	RRF delay_us_00000_arg_del, F
+001E  307F  	MOVLW 0x7F
+001F  05C3  	ANDWF delay_us_00000_arg_del, F
+0020        label2
+0020  0000  	NOP
+0021  0BC3  	DECFSZ delay_us_00000_arg_del, F
+0022  2820  	GOTO	label2
+0023  0008  	RETURN
+0024        ; } delay_us function end
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+00D1        __mul_16s__0000F
+00D1        ; { __mul_16s_16s__16 ; function begin
+00D1  01CD  	CLRF __mul_16s__0000F_1_i
+00D2  01D0  	CLRF CompTempVarRet386
+00D3  01D1  	CLRF CompTempVarRet386+D'1'
+00D4  0849  	MOVF __mul_16s__0000F_arg_a, W
+00D5  00CE  	MOVWF __mul_16s__0000F_1_t
+00D6  084A  	MOVF __mul_16s__0000F_arg_a+D'1', W
+00D7  00CF  	MOVWF __mul_16s__0000F_1_t+D'1'
+00D8  1FCC  	BTFSS __mul_16s__0000F_arg_b+D'1',7
+00D9  28E0  	GOTO	label12
+00DA  17CD  	BSF __mul_16s__0000F_1_i,7
+00DB  09CB  	COMF __mul_16s__0000F_arg_b, F
+00DC  09CC  	COMF __mul_16s__0000F_arg_b+D'1', F
+00DD  0ACB  	INCF __mul_16s__0000F_arg_b, F
+00DE  1903  	BTFSC gbl_status,2
+00DF  0ACC  	INCF __mul_16s__0000F_arg_b+D'1', F
+00E0        label12
+00E0  1A4D  	BTFSC __mul_16s__0000F_1_i,4
+00E1  28F2  	GOTO	label14
+00E2  1C4B  	BTFSS __mul_16s__0000F_arg_b,0
+00E3  28EA  	GOTO	label13
+00E4  084E  	MOVF __mul_16s__0000F_1_t, W
+00E5  07D0  	ADDWF CompTempVarRet386, F
+00E6  084F  	MOVF __mul_16s__0000F_1_t+D'1', W
+00E7  1803  	BTFSC gbl_status,0
+00E8  0F4F  	INCFSZ __mul_16s__0000F_1_t+D'1', W
+00E9  07D1  	ADDWF CompTempVarRet386+D'1', F
+00EA        label13
+00EA  1003  	BCF gbl_status,0
+00EB  0CCC  	RRF __mul_16s__0000F_arg_b+D'1', F
+00EC  0CCB  	RRF __mul_16s__0000F_arg_b, F
+00ED  1003  	BCF gbl_status,0
+00EE  0DCE  	RLF __mul_16s__0000F_1_t, F
+00EF  0DCF  	RLF __mul_16s__0000F_1_t+D'1', F
+00F0  0ACD  	INCF __mul_16s__0000F_1_i, F
+00F1  28E0  	GOTO	label12
+00F2        label14
+00F2  1FCD  	BTFSS __mul_16s__0000F_1_i,7
+00F3  0008  	RETURN
+00F4  09D0  	COMF CompTempVarRet386, F
+00F5  09D1  	COMF CompTempVarRet386+D'1', F
+00F6  0AD0  	INCF CompTempVarRet386, F
+00F7  1903  	BTFSC gbl_status,2
+00F8  0AD1  	INCF CompTempVarRet386+D'1', F
+00F9  0008  	RETURN
+00FA        ; } __mul_16s_16s__16 function end
+
+
+
+
+
+0210        _startup
+
+023E  118A  	BCF PCLATH,3
+023F  120A  	BCF PCLATH,4
+0240  29FC  	GOTO	main
+
+2007  3FC4  	DW 0x3FC4

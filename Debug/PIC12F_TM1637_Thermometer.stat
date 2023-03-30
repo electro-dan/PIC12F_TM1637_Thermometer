@@ -1,0 +1,22 @@
+// SourceBoost Linker Function Resource Usage Dump
+
+#GLOBAL:"global",line = 0,ram = 31.0,rom = 0;
+__mul_16s_16s__16(signed short,signed short):"C:\Temp\mul.c",line = 337,ram = 9.0,rom = 41;
+oneWireBusReset(void):"Z:\home\dan\PIC\PIC12F_TM1637_Thermometer\PIC12F_TM1637_Thermometer.c",line = 16,ram = 1.0,rom = 23;
+oneWireTxByte(unsigned char):"Z:\home\dan\PIC\PIC12F_TM1637_Thermometer\PIC12F_TM1637_Thermometer.c",line = 37,ram = 3.0,rom = 28;
+oneWireTxBytes(unsigned char,unsigned char):"Z:\home\dan\PIC\PIC12F_TM1637_Thermometer\PIC12F_TM1637_Thermometer.c",line = 69,ram = 2.0,rom = 7;
+oneWireRxByte(void):"Z:\home\dan\PIC\PIC12F_TM1637_Thermometer\PIC12F_TM1637_Thermometer.c",line = 79,ram = 2.1,rom = 29;
+tm1637UpdateDisplay(void):"Z:\home\dan\PIC\PIC12F_TM1637_Thermometer\PIC12F_TM1637_Thermometer.c",line = 112,ram = 1.0,rom = 31;
+tm1637StartCondition(void):"Z:\home\dan\PIC\PIC12F_TM1637_Thermometer\PIC12F_TM1637_Thermometer.c",line = 134,ram = 0.0,rom = 8;
+tm1637ByteWrite(unsigned char):"Z:\home\dan\PIC\PIC12F_TM1637_Thermometer\PIC12F_TM1637_Thermometer.c",line = 144,ram = 4.0,rom = 81;
+tm1637StopCondition(void):"Z:\home\dan\PIC\PIC12F_TM1637_Thermometer\PIC12F_TM1637_Thermometer.c",line = 198,ram = 0.0,rom = 20;
+startTemp(void):"Z:\home\dan\PIC\PIC12F_TM1637_Thermometer\PIC12F_TM1637_Thermometer.c",line = 376,ram = 0.0,rom = 7;
+readTemp(void):"Z:\home\dan\PIC\PIC12F_TM1637_Thermometer\PIC12F_TM1637_Thermometer.c",line = 386,ram = 0.0,rom = 13;
+initialise(void):"Z:\home\dan\PIC\PIC12F_TM1637_Thermometer\PIC12F_TM1637_Thermometer.c",line = 222,ram = 0.0,rom = 25;
+interrupt(void):"Z:\home\dan\PIC\PIC12F_TM1637_Thermometer\PIC12F_TM1637_Thermometer.c",line = 259,ram = 0.0,rom = 29;
+convertTemp(void):"Z:\home\dan\PIC\PIC12F_TM1637_Thermometer\PIC12F_TM1637_Thermometer.c",line = 292,ram = 12.0,rom = 159;
+main(void):"Z:\home\dan\PIC\PIC12F_TM1637_Thermometer\PIC12F_TM1637_Thermometer.c",line = 394,ram = 0.0,rom = 20;
+delay_us(unsigned char):"NoSourceFile",line = 0,ram = 0.0,rom = 10;
+delay_10us(unsigned char):"NoSourceFile",line = 0,ram = 0.0,rom = 10;
+_startup(void):"NoSourceFile",line = 0,ram = 0.0,rom = 49;
+#HEAP_BLOCK: 0, 82, 13;
