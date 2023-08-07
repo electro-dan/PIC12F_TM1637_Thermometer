@@ -5,4 +5,4 @@ Uses Sourceboost BoostC http://www.sourceboost.com
 
 For full details, see https://electro-dan.co.uk/Electronics/PIC_simple_thermometer.aspx
 
-For a XC8 port of TM1637 for PIC12F675 and PIC12F1840, see https://github.com/SteveMicroCode/PIC12F675-TM1637-Display-Code and https://github.com/SteveMicroCode/PIC-12F1840-Demo-Code
+For a XC8 port of TM1637 for PIC12F675 and PIC12F1840, see https://github.com/SteveMicroCode/PIC-TM1637-Library-Code
